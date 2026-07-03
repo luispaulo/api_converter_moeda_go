@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # -------------------------------------------------------------
+  # Banco de Dados (PostgreSQL)
+  # -------------------------------------------------------------
+  db:
+    image: postgres:15-alpine
+    container_name: docker-go-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-docker_go_db}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-docker_go_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # -------------------------------------------------------------
+  # Aplicação Go (Gin) com Hot Reload (Air)
+  # -------------------------------------------------------------
+  app:
+    build:
+      context: .
+      target: dev
+    container_name: docker-go-app
+    restart: always
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+    environment:
+      PORT: ${PORT:-8080}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-docker_go_db}
+    volumes:
+      - .:/app
+      # Evita que a compilação do container misture com os binários locais no host
+      - /app/tmp
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # -------------------------------------------------------------
+  # Gerenciador do Banco (pgAdmin 4)
+  # -------------------------------------------------------------
+  db-admin:
+    image: dpage/pgadmin4:latest
+    container_name: docker-go-pgadmin
+    restart: always
+    ports:
+      - "8082:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@admin.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin123}
+      # Permite que o pgadmin inicie sem pedir para trocar a senha do banco se salvarmos conexões
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "False"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
