@@ -8,12 +8,12 @@ import (
 	"os"
 	"time"
 
+	"docker-go/database"
+	"docker-go/handlers"
+
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
 )
-
-var db *pgx.Conn
 
 func main() {
 	// Carrega o arquivo .env se ele existir (útil para desenvolvimento local fora do Docker)
@@ -36,25 +36,11 @@ func main() {
 	// Monta a string de conexão (DSN)
 	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", dbUser, dbPass, dbHost, dbPort, dbName)
 
-	// Tenta conectar ao banco de dados com retentativas (retry logic)
-	// Isso evita que a aplicação falhe ao iniciar antes que o Postgres esteja pronto
-	var err error
-	maxRetries := 10
-	for i := 1; i <= maxRetries; i++ {
-		log.Printf("Tentando conectar ao banco de dados (tentativa %d/%d)...", i, maxRetries)
-		db, err = pgx.Connect(context.Background(), dsn)
-		if err == nil {
-			log.Println("Conectado ao banco de dados com sucesso!")
-			break
-		}
-		log.Printf("Erro ao conectar ao banco de dados: %v. Aguardando 3 segundos...", err)
-		time.Sleep(3 * time.Second)
+	// Inicializa conexão pool com o Banco de Dados e migrações
+	if err := database.InitDB(dsn); err != nil {
+		log.Fatalf("Erro ao inicializar banco de dados: %v", err)
 	}
-
-	if err != nil {
-		log.Fatalf("Falha crítica ao conectar ao banco de dados após %d tentativas: %v", maxRetries, err)
-	}
-	defer db.Close(context.Background())
+	defer database.CloseDB()
 
 	// Inicializa o roteador do Gin
 	r := gin.Default()
@@ -71,7 +57,7 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
-		err := db.Ping(ctx)
+		err := database.DB.Ping(ctx)
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"status":  "DOWN",
@@ -86,9 +72,19 @@ func main() {
 		})
 	})
 
+	// Grupo de rotas da API
+	api := r.Group("/api")
+	{
+		api.GET("/rates", handlers.GetRates)
+		api.GET("/convert", handlers.Convert)
+		api.GET("/logs", handlers.GetLogs)
+		api.POST("/rates/update", handlers.UpdateRates)
+	}
+
 	// Inicia o servidor HTTP
 	log.Printf("Servidor rodando na porta %s...", port)
 	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("Erro ao iniciar o servidor: %v", err)
 	}
 }
+

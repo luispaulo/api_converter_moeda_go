@@ -1,0 +1,29 @@
+# Binários e arquivos temporários de build
+/tmp/
+main
+api
+docker-go
+
+# Variáveis de ambiente e segredos locais (não commitar senhas de produção)
+.env
+.env*.local
+
+# Configurações de IDEs (VS Code, GoLand, etc.)
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Arquivos do Sistema Operacional
+.DS_Store
+Thumbs.db
+
+# Dependências Go (se usado em desenvolvimento local)
+vendor/
+
+# Arquivos de Testes e Cobertura
+*.out
+*.test
